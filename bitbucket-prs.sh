@@ -13,7 +13,10 @@ REPO_SLUG=
 
 NUM_APPROVALS_REQ=2  # Number of approvals required for pull request
 
-file_location=""
+START_TIME="09:00" # Only run after this time (24 hr time)
+END_TIME="19:00" # Only run before this time (24 hr time)
+
+file_location=
 
 # Export PATH
 export PATH="/usr/local/bin:/usr/bin:$PATH"
@@ -35,21 +38,28 @@ max_pr_count=$(( prs < max_num_prs ? prs : max_num_prs ))
 num_approved_by_me=0
 declare -a lines
 
+# Only run when between 9am & 7pm
+currenttime=$(date +%H:%M)
+if [[ "$currenttime" > $END_TIME ]] || [[ "$currenttime" < $START_TIME ]]; then
+    exit;
+fi
+
+
 for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
     _jq() {
      echo ${pr} | base64 --decode | jq -r ${1}
     }
 
-   build_state=$(curl -s -X GET --user $USERNAME:$PASSWORD $(_jq '.link_status') | jq -r '.values[].state')
+#   build_state=$(curl -s -X GET --user $USERNAME:$PASSWORD $(_jq '.link_status') | jq -r '.values[].state')
    self=$(curl -s -X GET --user $USERNAME:$PASSWORD $(_jq '.link_self'))
    num_approvals=$(echo $self | jq -r '[select(.participants[].approved)] | length')
    colour="red"
-   if [[ $build_state == "SUCCESSFUL" ]]; then
-    colour="green" # Colour to show if PR is good to go (approved & build passed)
-    if [ "$num_approvals" -lt "$NUM_APPROVALS_REQ" ]; then
-      colour="black" # Colour to show if PR build passed but not approved
-    fi
-   fi
+#   if [[ $build_state == "SUCCESSFUL" ]]; then
+#    colour="green" # Colour to show if PR is good to go (approved & build passed)
+#    if [ "$num_approvals" -lt "$NUM_APPROVALS_REQ" ]; then
+#      colour="black" # Colour to show if PR build passed but not approved
+#    fi
+#   fi
 
    approved_by_me=$(echo $self | jq -r --arg USERNAME "$USERNAME" '.participants[] | select(.user.nickname == $USERNAME) | .approved')
 
