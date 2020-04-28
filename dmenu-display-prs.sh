@@ -3,19 +3,21 @@
 file_location=""
 url=""
 
-# Update output file with current status of PR
-# mark_seen () {
-#     # Look for $1 (line) in file and update it.
-#     line=$1
-#     echo -e $line > line.txt
+urgent_lines='99'
 
-#     # Update line in file
-#     sed -i 's/unseen=.* |/unseen=0 |/g' line.txt
-
-#     updated_line=`cat line.txt`
-
-#     sed -i 's#'"$line"'#'"$updated_line"'#g' output.txt # Note that /'s break this so might need to strip them?
-# }
+function get_urgent_lines {
+    item_number=0
+    while IFS='Last updated:' read -r ADDR; do
+        for i in "${ADDR[@]}"; do
+            # process "$i"
+            item_number=$((item_number+1))
+            if [[ $i == *"New: 1"* ]] || [[ $i != *"👀 0"* ]]; then
+                urgent_lines=$urgent_lines','$item_number
+            fi
+            echo $i
+        done
+    done <<< "$1"
+}
 
 mark_seen () {
     # Set unseen to 0 for PRID $1
@@ -32,16 +34,13 @@ mark_seen () {
 
 declare -a lines
 
-
 # echo -e $LINES | jq '.' > output.json
 
 JSON=`cat "$file_location"output.json`
 
-#MENU=`echo -e $JSON | jq '.[] | .approved, (.approvals|tostring) + " | " + .title + " | " + .author + " | Comments: " + (.comments|tostring) + " | Unseen: " + (.unseen|tostring)  + " | ID: " + (.id|tostring) + " # " + (.new|tostring) + "\n"'`
-#MENU=`echo -e $JSON | jq '.[] "\"" + .approved + "\" + " | " + .title + " | " + .author + " | Comments: " + (.comments|tostring) + " | Unseen: " + (.unseen|tostring)  + " | ID: " + (.id|tostring) + " # " + (.new|tostring) + "\n"'`
-MENU=`echo -e $JSON | jq -r '.[] | [.approved, .author, .title, "Comments: " + (.comments|tostring), "Unseen: " + (.unseen|tostring), "ID: " + (.id|tostring) + "#", "New: " + (.new|tostring), .approvals, "Created at: " + .created_at, "Last updated: " + .last_updated] | @csv'`
+MENU=`echo -e $JSON | jq -r '.[] | [.approved, .author, .title, "💬 " + (.comments|tostring), "👀 " + (.unseen|tostring), "ID: " + (.id|tostring) + "#", "New: " + (.new|tostring), .approvals, "Created at: " + .created_at, "Last updated: " + .last_updated] | @csv'`
 
-MENU=`echo -e $MENU | awk -v FS="," 'BEGIN{print "============"}
+MENU=`echo -e $MENU | awk -v FS="," 'BEGIN{}
 {approved=substr($1,2,1)}
 {author=FS $2}
 {author=substr(author,3,length(author) - 3)}
@@ -64,7 +63,18 @@ length(title) > 40 {title=substr(title,0,37)"...."}
 {updated=substr(updated,3,length(updated) - 19)}
 {printf "%-2s %-3s %-40s %-20s %-15s %10s %15s %10s %30s %35s %20s", approved, approvals, title, author, comments, unseen, id, new, created, updated, ORS}'`
 
-selected=$(echo -e $MENU | dmenu -l 10)
+# Get menu items which should be coloured differently (e.g. because they are unseen)
+get_urgent_lines $MENU
+
+header=`printf "%-2s %-3s %-40s %-20s %-16s %-10s %15s %10s %30s %35s", '√' '√' 'title' 'author' 'comments' 'unseen' 'id' 'new' 'created' 'updated'`
+MENU=$header'\n'$MENU
+#echo $MENU
+
+#echo $urgent_lines
+
+#exit;
+
+selected=$(echo -e $MENU | dmenu -l 20 -u $urgent_lines)
 
 echo $selected
 
