@@ -81,6 +81,7 @@ for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
 #   echo -e "me: $me"  >> output-test.json
 #   echo -e "approved_by_me: $approved_by_me"  >> output-test.json
 
+
    if [[ $approved_by_me == "true" ]]; then
     approved_by_me="Y"
     ((num_approved_by_me++))
@@ -104,8 +105,11 @@ for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
     pr_changed=1
   fi
 
+#echo $PR_JSON
+
   comments=$(_jq '.num_comments')
   new=0
+
 
 #  echo -e "$(_jq '.id')" >> output-test.json
   if [[ "$old_unseen" == '"0"' || "$old_unseen" == '""0""' || "$old_unseen" == '0' || "$old_unseen" == 0 ]]; then
@@ -124,6 +128,7 @@ for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
   title=`echo "${title//\'}"`
 #  title="zz"
 #   echo $title
+
   line=$(echo "\"approved\":\"$approved_by_me\", " \"author\":\"$(_jq '.author')\", \"title\":\"$title\", " \"approvals\":$num_approvals, \"comments\":$(_jq '.num_comments'), \"unseen\":$unseen, \"id\":$(_jq '.id'), \"new\":$new, \"destination_branch\":\"$(_jq '.destination_branch')\", \"pr_changed\":$pr_changed, \"created_at\":\"$(_jq '.created_at')\", \"last_updated\":\"$(_jq '.last_updated')\"")
 
   let pr_count++
