@@ -24,10 +24,11 @@ export PATH="/usr/local/bin:/usr/bin:$PATH"
 max_num_prs=20
 
 response=$(curl -s -X GET --user $USERNAME:$PASSWORD "https://bitbucket.org/api/2.0/repositories/$REPO_OWNER/$REPO_SLUG/pullrequests/?pagelen=$max_num_prs")
-json=$(echo $response | jq -r -c '[.values[] | {id: .id, title: .title, author: .author.display_name, num_comments: .comment_count, link_html: .links.html.href, link_status: .links.statuses.href, link_self: .links.self.href, created_at: .created_on, last_updated: .updated_on}]')
+json=$(echo $response | jq -r -c '[.values[] | {id: .id, title: .title, author: .author.display_name, num_comments: .comment_count, link_html: .links.html.href, link_status: .links.statuses.href, link_self: .links.self.href, destination_branch: .destination.branch.name, created_at: .created_on, last_updated: .updated_on, last_checked: 0}]')
 prs=$(echo $response | jq -r -c '(.size|tostring)')
 
-#echo -e $response;
+# echo -e $response > $file_location"response.txt";
+# echo -e $json > $file_location"json.txt";
 #exit;
 pr_count=0
 max_pr_count=$(( prs < max_num_prs ? prs : max_num_prs ))
@@ -36,11 +37,24 @@ num_approved_by_me=0
 declare -a lines
 
 # Only run when between 9am & 7pm
-currenttime=$(date +%H:%M)
-if [[ "$currenttime" > $END_TIME ]] || [[ "$currenttime" < $START_TIME ]]; then
+current_time=$(date +%H:%M)
+if [[ "$current_time" > $END_TIME ]] || [[ "$current_time" < $START_TIME ]]; then
+    echo `cat $file_location"bitbucket-prs-polybar.txt"` "$current_time"
     exit;
 fi
 
+echo $json > $file_location"bitbucket-prs-json.txt"
+
+# Check if there are any differences.  If none, output contents of polybar status file and exit
+prev_json=$file_location"bitbucket-prs-json-prev.txt"
+new_json=$file_location"bitbucket-prs-json.txt"
+changed=`cmp --silent $prev_json $new_json || echo "true"`
+if [[ $changed != "true" ]]; then
+    echo `cat $file_location"bitbucket-prs-polybar.txt"` "$current_time"
+    exit;
+fi
+
+echo $json > $file_location"bitbucket-prs-json-prev.txt"
 
 for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
     _jq() {
@@ -74,11 +88,21 @@ for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
     approved_by_me="-"
    fi
 
+  PR_JSON_OLD=`cat $file_location'output.json' | jq .`
+
   # Find unseen value from existing output file.
   # If 0, make unseen = new comments - old comments.  Otherwise, make unseen=comments.
-  PR_JSON=`cat $file_location'output.json' | jq .`
-  old_comments=$(echo -e $PR_JSON | jq ".[] | select(.id == $(_jq '.id')) | .comments")
-  old_unseen=$(echo -e $PR_JSON | jq ".[] | select(.id == $(_jq '.id')) | .unseen")
+  old_comments=$(echo -e $PR_JSON_OLD | jq ".[] | select(.id == $(_jq '.id')) | .comments")
+  old_unseen=$(echo -e $PR_JSON_OLD | jq ".[] | select(.id == $(_jq '.id')) | .unseen")
+
+  last_updated_old=$(echo -e $PR_JSON_OLD | jq ".[] | select(.id == $(_jq '.id')) | .last_updated")
+  last_updated=$(_jq '.last_updated')
+
+  pr_changed=0
+
+  if [[ "$last_updated_old" != "$last_updated" ]]; then
+    pr_changed=1
+  fi
 
   comments=$(_jq '.num_comments')
   new=0
@@ -94,7 +118,13 @@ for pr in $(echo "${json}" | jq -r '.[] | @base64'); do
     new=1
   fi
 
-  line=$(echo "\"approved\":\"$approved_by_me\", " \"author\":\"$(_jq '.author')\", \"title\":\"$(_jq '.title')\", " \"approvals\":$num_approvals, \"comments\":$(_jq '.num_comments'), \"unseen\":$unseen, \"id\":$(_jq '.id'), \"new\":$new, \"created_at\":\"$(_jq '.created_at')\", \"last_updated\":\"$(_jq '.last_updated')\"")
+
+  title=$(_jq '.title')
+  title=`echo "${title//\"}"`
+  title=`echo "${title//\'}"`
+#  title="zz"
+#   echo $title
+  line=$(echo "\"approved\":\"$approved_by_me\", " \"author\":\"$(_jq '.author')\", \"title\":\"$title\", " \"approvals\":$num_approvals, \"comments\":$(_jq '.num_comments'), \"unseen\":$unseen, \"id\":$(_jq '.id'), \"new\":$new, \"destination_branch\":\"$(_jq '.destination_branch')\", \"pr_changed\":$pr_changed, \"created_at\":\"$(_jq '.created_at')\", \"last_updated\":\"$(_jq '.last_updated')\"")
 
   let pr_count++
 
@@ -112,59 +142,9 @@ num_unapproved_by_me=$((prs - num_approved_by_me))
 
 echo $prs "/" $num_unapproved_by_me > $file_location"bitbucket-prs.txt"
 
-current_time=`date +"%T"`
 
-echo $prs "/" $num_unapproved_by_me $current_time
+polybar_status=$(echo $prs "/" $num_unapproved_by_me)
 
-#exit;
+echo $polybar_status > $file_location"bitbucket-prs-polybar.txt"
 
-# Print everything out
-
-# num_unapproved_by_me=$((prs - num_approved_by_me))
-# echo $prs "/" $num_unapproved_by_me " | templateImage=$icon dropdown=false" # Display number of PRs in menu bar
-# # if [[ $num_unapproved_by_me != 0 ]]; then
-# #   echo "($num_unapproved_by_me unapproved) | dropdown=false" # Cycle number of PRs not approved by me in menu bar, if > 0
-# # fi
-# echo "---"
-# echo "View all open pull requests | href=https://bitbucket.org/$REPO_OWNER/$REPO_SLUG/pull-requests/"
-# echo "---"
-
-#for line in "${lines[@]}"
-#do
-#  echo "$line" # Display open PRs in dropdown
-#done
-
-#dmenu -l 10 <<< "${LINES[@]}"
-
-#menu=$("${lines[@]}" | dmenu -l 10)
-#list=("1\n2\n3\n4\n5")
-#echo -e "${lines[@]}" | dmenu -l 10
-
-
-
-
-
-
-
-
-
-
-
-
-# selected=$(echo -e "${lines[@]}" | dmenu -l 10)
-# link=$(echo -e $selected | grep -o -P '(?<=href=).*(?= color)')
-
-# action=$(echo -e "Open link\nMark as seen\nDo nothing" | dmenu -l 3)
-
-# case "$action" in
-#     "Open link")
-#         xdg-open $link
-#         ;;
-#     "Mark as seen")
-#         echo "marking seen"
-#         echo $selected
-#         ;;
-#     "Do nothing")
-#         echo "exiting"
-#         ;;
-# esac
+echo $polybar_status "$current_time *"
