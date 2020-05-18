@@ -1,20 +1,21 @@
-#!/bin/zsh
+#!/bin/bash
 
 file_location=""
 url=""
 
 urgent_lines='99'
 
-function get_urgent_lines {
+get_urgent_lines() {
     item_number=0
-    while IFS='Updated:' read -r ADDR; do
+    while IFS='New:' read -r ADDR; do
         for i in "${ADDR[@]}"; do
-            # process "$i"
             item_number=$((item_number+1))
-            if [[ $i == *"New: 1"* ]] || [[ $i != *"👀 0"* ]]; then
-                urgent_lines=$urgent_lines','$item_number
+            if [[ $i != *"👀"* ]]; then
+                continue
             fi
-            echo $i
+            if [[ $i == *"New: 1"* ]] || [[ $i != *"👀 0"* ]]; then
+                urgent_lines="$urgent_lines,$item_number"
+            fi
         done
     done <<< "$1"
 }
@@ -25,13 +26,13 @@ mark_seen () {
 
     PR_JSON=`cat $file_location'output.json' | jq .`
 
-    PR_JSON_UPDATED=`echo -e $PR_JSON | (jq "(.[] | select(.id == $PRID) | .unseen, .new) |= 0")`
+    PR_JSON_UPDATED=`echo -e "$PR_JSON" | (jq "(.[] | select(.id == $PRID) | .unseen, .new) |= 0")`
 
-    PR_JSON_UPDATED=`echo -e $PR_JSON_UPDATED | (jq "(.[] | select(.id == $PRID) | .last_checked) |= 1")`
+    PR_JSON_UPDATED=`echo -e "$PR_JSON_UPDATED" | (jq "(.[] | select(.id == $PRID) | .last_checked) |= 1")`
 
-    echo -e $PR_JSON_UPDATED
+    echo -e "$PR_JSON_UPDATED"
 
-    echo -e $PR_JSON_UPDATED > $file_location"output.json"
+    echo -e "$PR_JSON_UPDATED" > $file_location"output.json"
 }
 
 declare -a lines
@@ -40,9 +41,9 @@ declare -a lines
 
 JSON=`cat "$file_location"output.json`
 
-MENU=`echo -e $JSON | jq -r '.[] | [.approved, .author, .title, .destination_branch,  "💬 " + (.comments|tostring), "👀 " + (.unseen|tostring), "New: " + (.new|tostring), .approvals, "Created: " + .created_at, "Updated: " + .last_updated, "Changed: " + (.last_checked|tostring), "ID: " + (.id|tostring) + "#" ] | @csv'`
+MENU=`echo -e "$JSON" | jq -r '.[] | [.approved, .author, .title, .destination_branch,  "💬 " + (.comments|tostring), "👀 " + (.unseen|tostring), "New: " + (.new|tostring), .approvals, "Created: " + .created_at, "Updated: " + .last_updated, "Changed: " + (.last_checked|tostring), "ID: " + (.id|tostring) + "#" ] | @csv'`
 
-MENU=`echo -e $MENU | awk -v FS="," 'BEGIN{}
+MENU=`echo -e "$MENU" | awk -v FS="," 'BEGIN{}
 {approved=substr($1,2,1)}
 {author=FS $2}
 {author=substr(author,3,length(author) - 3)}
@@ -67,27 +68,29 @@ length(title) > 40 {title=substr(title,0,37)"...."}
 {changed=substr(changed,3,length(changed) - 19)}
 {id=FS $12}
 {id=substr(id,3,length(id) - 3)}
-{printf "%-2s %-3s %-40s %-20s %-20s %-10s %-10s %-10s %-25s %30s %15s %15s %10s", approved, approvals, title, author, destination, comments, unseen, new, created, updated, changed, id, ORS}'`
+{printf "!%-2s %-3s %-40s %-20s %-20s %-10s \n%-10s %-10s %-25s %30s %15s %15s %10s", approved, approvals, title, author, destination, comments, unseen, new, created, updated, changed, id, ORS}'`
 
-echo -e $MENU > $file_location"menu.txt"
+echo -e "$MENU" > $file_location"menu.txt"
 
 # Get menu items which should be coloured differently (e.g. because they are unseen)
-get_urgent_lines $MENU
+get_urgent_lines "$MENU"
 
 header=`printf "%-2s %-3s %-40s %-20s %-16s %-10s %15s %10s %30s %35s", '√' '√' 'title' 'author' 'comments' 'unseen' 'id' 'new' 'created' 'updated'`
-MENU=$header'\n'$MENU
+#header=''
+MENU=$header$MENU
 #echo $MENU
 
 #echo $urgent_lines
 
 #exit;
 
-selected=$(echo -e $MENU | dmenu -l 20 -u $urgent_lines)
 
-echo $selected
+selected=$(echo -e "$MENU" | dmenu -l 10 -u "$urgent_lines" -eh 3 -sep "!")
+
+#echo "$selected"
 
 #selected=$(echo -e "${LINES[@]}" | dmenu -l 10)
-pr_id=$(echo -e $selected | grep -o -P '(?<=ID: ).*(?=#)')
+pr_id=$(echo -e "$selected" | grep -o -P '(?<=ID: ).*(?=#)')
 
 # echo '----'
 # echo $pr_id
@@ -95,12 +98,12 @@ pr_id=$(echo -e $selected | grep -o -P '(?<=ID: ).*(?=#)')
 
 # exit;
 
-action=$(echo -e "Open link\nMark as seen\nDo nothing" | dmenu -l 3)
+action=$(echo -e "Open link\nMark as seen\nDo nothing" | dmenu -l 3 -eh 2)
 
 case "$action" in
     "Open link")
-        echo "Opening " $url$pr_id
-        xdg-open $url$pr_id
+        echo "Opening " $url"$pr_id"
+        xdg-open $url"$pr_id"
         sleep 1 # In case of error messages
         mark_seen "$pr_id"
         sleep 2
