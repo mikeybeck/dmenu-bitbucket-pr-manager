@@ -3,17 +3,17 @@
 file_location=""
 url=""
 
-urgent_lines='99'
+urgent_lines="99"
 
 get_urgent_lines() {
     item_number=0
     while IFS='New:' read -r ADDR; do
         for i in "${ADDR[@]}"; do
+            if [[ $i != *"💬"* ]]; then
             item_number=$((item_number+1))
-            if [[ $i != *"👀"* ]]; then
                 continue
             fi
-            if [[ $i == *"New: 1"* ]] || [[ $i != *"👀 0"* ]]; then
+            if [[ $i == *"New: 1"* ]] || [[ $i != *" (0) "* ]]; then
                 urgent_lines="$urgent_lines,$item_number"
             fi
         done
@@ -41,7 +41,7 @@ declare -a lines
 
 JSON=`cat "$file_location"output.json`
 
-MENU=`echo -e "$JSON" | jq -r '.[] | [.approved, .author, .title, .destination_branch,  "💬 " + (.comments|tostring), "👀 " + (.unseen|tostring), "New: " + (.new|tostring), .approvals, "Created: " + .created_at, "Updated: " + .last_updated, "Changed: " + (.last_checked|tostring), "ID: " + (.id|tostring) + "#" ] | @csv'`
+MENU=`echo -e "$JSON" | jq -r '.[] | [.approved, .author, .title, .destination_branch,  "💬 " + (.comments|tostring), "(" + (.unseen|tostring) + ")", "New: " + (.new|tostring), .approvals, "Created: " + .created_at, "Updated: " + .last_updated, "Changed: " + (.last_checked|tostring), "ID: " + (.id|tostring) + "#" ] | @csv'`
 
 MENU=`echo -e "$MENU" | awk -v FS="," 'BEGIN{}
 {approved=substr($1,2,1)}
@@ -68,8 +68,8 @@ length(title) > 40 {title=substr(title,0,37)"...."}
 {changed=substr(changed,3,length(changed) - 19)}
 {id=FS $12}
 {id=substr(id,3,length(id) - 3)}
-{printf "!%-2s %-3s %-40s %-20s %-20s %-10s \n%-10s %-10s %-25s %30s %15s %15s %10s", approved, approvals, title, author, destination, comments, unseen, new, created, updated, changed, id, ORS}'`
-
+{printf "!%-2s %-3s %-40s %-20s %-20s %-5s %-5s %-10s %-25s %30s %15s %15s %10s", approved, approvals, title, author, destination, comments, unseen, new, created, updated, changed, id, ORS}'`
+#        appr  apprs title auth dest  comm  unsee
 echo -e "$MENU" > $file_location"menu.txt"
 
 # Get menu items which should be coloured differently (e.g. because they are unseen)
