@@ -9,9 +9,8 @@ get_urgent_lines() {
     item_number=0
     while IFS='New:' read -r ADDR; do
         for i in "${ADDR[@]}"; do
-            if [[ $i != *"💬"* ]]; then
+            if [[ $i == *"💬"* ]]; then
             item_number=$((item_number+1))
-                continue
             fi
             if [[ $i == *"New: 1"* ]] || [[ $i != *" (0) "* ]]; then
                 urgent_lines="$urgent_lines,$item_number"
